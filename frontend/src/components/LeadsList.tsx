@@ -10,6 +10,7 @@ export const LeadsList: FC = () => {
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false)
   const [isEnrichDropdownOpen, setIsEnrichDropdownOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [verifyingLeadIds, setVerifyingLeadIds] = useState<Set<number>>(new Set())
   const queryClient = useQueryClient()
 
   const leads = useQuery({
@@ -37,9 +38,12 @@ export const LeadsList: FC = () => {
 
   const verifyEmailsMutation = useMutation({
     mutationFn: async (ids: number[]) => api.leads.verifyEmails({ leadIds: ids }),
+    onMutate: (ids) => {
+      setVerifyingLeadIds(new Set(ids))
+      setIsEnrichDropdownOpen(false)
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['leads', 'getMany'] })
-      setIsEnrichDropdownOpen(false)
       toast.success(
         data.verifiedCount === 1
           ? `Verified ${data.verifiedCount} email`
@@ -48,7 +52,10 @@ export const LeadsList: FC = () => {
     },
     onError: () => {
       toast.error('Failed to verify emails. Please try again.')
-    }
+    },
+    onSettled: () => {
+      setVerifyingLeadIds(new Set())
+    },
   })
 
   const handleSelectAll = (checked: boolean) => {
@@ -264,7 +271,23 @@ export const LeadsList: FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{lead.email || '-'} {lead.emailVerified === null ? '❓' : lead.emailVerified ? '✅' : '❌'}</div>
+                    <div className="text-sm text-gray-900 flex items-center gap-1">
+                      <span>{lead.email || '-'}</span>
+                      {verifyingLeadIds.has(lead.id) ? (
+                        <svg
+                          aria-label="Verifying email"
+                          className="animate-spin h-4 w-4 text-blue-600"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <span>{lead.emailVerified === null ? '❓' : lead.emailVerified ? '✅' : '❌'}</span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{lead.jobTitle || '-'}</div>
