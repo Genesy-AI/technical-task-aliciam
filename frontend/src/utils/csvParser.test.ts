@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCsv, isValidEmail } from './csvParser'
+import { parseCsv, isValidEmail, isValidCountryCode, normalizeCountryCode } from './csvParser'
 
 describe('isValidEmail', () => {
   it('should return true for valid email addresses', () => {
@@ -66,6 +66,7 @@ John,Doe,john.doe@example.com,Developer,US,Tech Corp`
       companyName: 'Tech Corp',
       isValid: true,
       errors: [],
+      warnings: [],
       rowIndex: 2,
     })
   })
@@ -222,5 +223,99 @@ Jane,Johnson,jane@example.com`
     expect(result[0].lastName).toBe('Doe')
     expect(result[0].email).toBe('john@example.com')
     expect(result[0].isValid).toBe(true)
+  })
+})
+
+describe('isValidCountryCode', () => {
+  it('returns true for valid ISO 3166-1 alpha-2 codes', () => {
+    expect(isValidCountryCode('US')).toBe(true)
+    expect(isValidCountryCode('FR')).toBe(true)
+    expect(isValidCountryCode('TV')).toBe(true)
+    expect(isValidCountryCode('KP')).toBe(true)
+  })
+
+  it('is case-insensitive for validity', () => {
+    expect(isValidCountryCode('us')).toBe(true)
+    expect(isValidCountryCode('Fr')).toBe(true)
+  })
+
+  it('returns false for non-two-letter input', () => {
+    expect(isValidCountryCode('USA')).toBe(false)
+    expect(isValidCountryCode('U')).toBe(false)
+    expect(isValidCountryCode('12')).toBe(false)
+    expect(isValidCountryCode('U1')).toBe(false)
+    expect(isValidCountryCode('')).toBe(false)
+  })
+
+  it('returns false for two-letter strings that are not real region codes', () => {
+    expect(isValidCountryCode('ZZ')).toBe(false)
+    expect(isValidCountryCode('XX')).toBe(false)
+  })
+})
+
+describe('normalizeCountryCode', () => {
+  it('uppercases the input', () => {
+    expect(normalizeCountryCode('us')).toBe('US')
+    expect(normalizeCountryCode('Fr')).toBe('FR')
+    expect(normalizeCountryCode('US')).toBe('US')
+  })
+})
+
+describe('parseCsv — country code handling', () => {
+  const csvWith = (code: string) =>
+    `firstName,lastName,email,countryCode\nJohn,Doe,john@example.com,${code}`
+
+  it('preserves a valid uppercase code unchanged with no warning', () => {
+    const result = parseCsv(csvWith('US'))
+    expect(result[0].countryCode).toBe('US')
+    expect(result[0].warnings).toEqual([])
+    expect(result[0].isValid).toBe(true)
+  })
+
+  it('normalizes a valid lowercase code to uppercase with no warning', () => {
+    const result = parseCsv(csvWith('us'))
+    expect(result[0].countryCode).toBe('US')
+    expect(result[0].warnings).toEqual([])
+    expect(result[0].isValid).toBe(true)
+  })
+
+  it('normalizes a valid mixed-case code to uppercase with no warning', () => {
+    const result = parseCsv(csvWith('Us'))
+    expect(result[0].countryCode).toBe('US')
+    expect(result[0].warnings).toEqual([])
+  })
+
+  it('preserves an invalid 3-letter code raw and emits a warning (still imports)', () => {
+    const result = parseCsv(csvWith('USA'))
+    expect(result[0].countryCode).toBe('USA')
+    expect(result[0].warnings).toEqual(['Invalid country code'])
+    expect(result[0].isValid).toBe(true)
+  })
+
+  it('preserves an invalid 2-letter non-region code raw and emits a warning', () => {
+    const result = parseCsv(csvWith('ZZ'))
+    expect(result[0].countryCode).toBe('ZZ')
+    expect(result[0].warnings).toEqual(['Invalid country code'])
+    expect(result[0].isValid).toBe(true)
+  })
+
+  it('preserves a numeric value raw and emits a warning', () => {
+    const result = parseCsv(csvWith('12'))
+    expect(result[0].countryCode).toBe('12')
+    expect(result[0].warnings).toEqual(['Invalid country code'])
+    expect(result[0].isValid).toBe(true)
+  })
+
+  it('leaves countryCode undefined with no warning when the cell is empty', () => {
+    const result = parseCsv(csvWith(''))
+    expect(result[0].countryCode).toBeUndefined()
+    expect(result[0].warnings).toEqual([])
+  })
+
+  it('leaves countryCode undefined with no warning when the column is missing entirely', () => {
+    const csv = `firstName,lastName,email\nJohn,Doe,john@example.com`
+    const result = parseCsv(csv)
+    expect(result[0].countryCode).toBeUndefined()
+    expect(result[0].warnings).toEqual([])
   })
 })

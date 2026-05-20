@@ -9,6 +9,7 @@ export interface CsvLead {
   companyName?: string
   isValid: boolean
   errors: string[]
+  warnings: string[]
   rowIndex: number
 }
 
@@ -16,6 +17,22 @@ export const isValidEmail = (email: string): boolean => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   return emailRegex.test(email)
 }
+
+const regionDisplayNames = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' })
+const NON_COUNTRY_REGION_CODES = new Set(['ZZ'])
+
+export const isValidCountryCode = (code: string): boolean => {
+  if (!/^[A-Za-z]{2}$/.test(code)) return false
+  const upper = code.toUpperCase()
+  if (NON_COUNTRY_REGION_CODES.has(upper)) return false
+  try {
+    return regionDisplayNames.of(upper) !== undefined
+  } catch {
+    return false
+  }
+}
+
+export const normalizeCountryCode = (code: string): string => code.toUpperCase()
 
 export const parseCsv = (content: string): CsvLead[] => {
   if (!content?.trim()) {
@@ -89,13 +106,23 @@ export const parseCsv = (content: string): CsvLead[] => {
       errors.push('Invalid email format')
     }
 
+    const warnings: string[] = []
+    if (lead.countryCode && !isValidCountryCode(lead.countryCode)) {
+      warnings.push('Invalid country code')
+    }
+
     data.push({
       ...lead,
       firstName: lead.firstName || '',
       lastName: lead.lastName || '',
       email: lead.email || '',
+      countryCode:
+        lead.countryCode && isValidCountryCode(lead.countryCode)
+          ? normalizeCountryCode(lead.countryCode)
+          : lead.countryCode,
       isValid: errors.length === 0,
       errors,
+      warnings,
     } as CsvLead)
   })
 
